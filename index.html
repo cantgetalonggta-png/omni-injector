@@ -448,7 +448,12 @@ function renderFeed(){
 }
 
 function esc(s){
-  return String(s??"").replace(/[&<>"']/g, c=>({"&":"&","<":"<",">":">",'"':""","'":"&#39;"}[c]));
+  return String(s==null?"":s)
+    .replace(/&/g,"&")
+    .replace(/</g,"<")
+    .replace(/>/g,">")
+    .replace(/"/g,""")
+    .replace(/'/g,"&#39;");
 }
 
 function updateStats(){
