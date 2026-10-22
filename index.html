@@ -78,6 +78,7 @@ body{display:flex;flex-direction:column;min-height:100vh}
   <button class="btn btn-ok" id="btnVerifyAll" type="button" disabled>Verify Live (browser APIs)</button>
   <button class="btn btn-mag" id="btnInjectAll" type="button" disabled>Inject All → State</button>
   <button class="btn btn-ghost" id="btnWipe" type="button">Wipe All</button>
+  <button class="btn btn-mag" id="btnSelfTest" type="button">Auto Self-Test Endpoints</button>
   <div class="stats">
     <span>Detected: <b id="stDet">0</b></span>
     <span>Repaired: <b id="stRep">0</b></span>
@@ -194,33 +195,30 @@ function unwrapEnvelopes(s){
 /** Join keys broken across lines / spaces after known prefixes */
 function rejoinBrokenKeys(text){
   let t = stripInvisible(text);
-  // remove soft line breaks inside long tokens: prefix + newline/spaces + continuation
+  // Join KEY=prefix + newline + body (common save corruption)
+  t = t.replace(/(=\s*)(sk-(?:proj|svcacct|admin)-|sk-ant-(?:api\d{2}-|admin\d{2}-)?|sk-or-v1-|xai-|AIza|ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|gsk_|sk_live_|sk_test_|rk_live_|rk_test_|hf_|r8_|npm_|glpat-|sb_secret_|whsec_)(\s*\n\s*)([A-Za-z0-9_\-./+]{8,})/g,
+    function(_, eq, pref, _nl, body){ return eq + pref + body; });
   const prefixes = [
     "sk-proj-","sk-svcacct-","sk-admin-","sk-ant-api03-","sk-ant-admin01-","sk-ant-",
     "sk-or-v1-","sk_live_","sk_test_","rk_live_","rk_test_","pk_live_","pk_test_",
     "xai-","AIza","ghp_","gho_","ghu_","ghs_","ghr_","github_pat_","gsk_",
     "xoxb-","xoxp-","xoxa-","xoxr-","xoxs-","xapp-","glpat-","sb_secret_","sb_publishable_",
-    "whsec_","AKIA","ASIA","npm_","pypi-","hf_","lin_api_","GOCSPX-","shpat_","AGE-SECRET-KEY-1"
+    "whsec_","AKIA","ASIA","npm_","pypi-","hf_","lin_api_","GOCSPX-","shpat_","AGE-SECRET-KEY-1","r8_"
   ];
   for (const p of prefixes){
-    // e.g. sk-proj-\nABCdef  OR sk-proj- ABC def (spaces inside)
     const esc = p.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
     const re = new RegExp("("+esc+")(?:[\\s\\u200b]+([A-Za-z0-9_\\-./+]+))+","g");
-    t = t.replace(re, (m, pref, ...rest) => {
-      // rebuild by taking all alnum pieces after prefix from full match
-      const body = m.slice(pref.length).replace(/[\s\u200b]+/g,"");
-      return pref + body;
+    t = t.replace(re, function(m, pref){
+      return pref + m.slice(pref.length).replace(/[\s\u200b]+/g,"");
     });
   }
-  // generic: lines that are only token fragments appended to previous line if prev looks like incomplete key
   const lines = t.split("\n");
   const out = [];
   for (let i=0;i<lines.length;i++){
     let line = lines[i];
     while (i+1 < lines.length){
       const next = lines[i+1].trim();
-      // continuation: next is mostly token chars and previous ends mid-token
-      if (next && /^[A-Za-z0-9_\-./+]{8,}$/.test(next) && /(?:sk-|xai-|AIza|ghp_|eyJ|AKIA|gsk_|Bearer)/i.test(line) && !/[=\s]$/.test(line.trim())){
+      if (next && /^[A-Za-z0-9_\-./+]{8,}$/.test(next) && /(?:sk-|xai-|AIza|ghp_|eyJ|AKIA|gsk_|Bearer|sk_live|sk_test|github_pat)/i.test(line) && !/[=\s]$/.test(line.trim())){
         line = line.replace(/\s+$/,"") + next;
         i++;
       } else break;
@@ -648,6 +646,34 @@ try{
   const s = localStorage.getItem("omni_injector_state_v2");
   if (s){ const j=JSON.parse(s); if (j && j.secrets){ injected=j.secrets; renderState(); } }
 }catch(_){}
+
+
+$("#btnSelfTest").addEventListener("click", async ()=>{
+  setStatePill($("#feedState"), "Self-test…", "parsing");
+  const probes = [
+    {name:"OpenAI", url:"https://api.openai.com/v1/models", headers:{Authorization:"Bearer sk-INVALID_SELFTEST_OMNI"}},
+    {name:"xAI", url:"https://api.x.ai/v1/models", headers:{Authorization:"Bearer xai-INVALID_SELFTEST_OMNI"}},
+    {name:"Anthropic", url:"https://api.anthropic.com/v1/models", headers:{"x-api-key":"sk-ant-api03-INVALID", "anthropic-version":"2023-06-01"}},
+    {name:"Gemini", url:"https://generativelanguage.googleapis.com/v1beta/models?key=AIzaSyINVALID_SELFTEST_00000000000", headers:{}},
+    {name:"Groq", url:"https://api.groq.com/openai/v1/models", headers:{Authorization:"Bearer gsk_INVALID_SELFTEST"}},
+    {name:"GitHub", url:"https://api.github.com/user", headers:{Authorization:"Bearer ghp_INVALIDSELFTEST0000000000000000000", Accept:"application/vnd.github+json"}}
+  ];
+  const lines = [];
+  for (const p of probes){
+    try{
+      const r = await fetch(p.url, {method:"GET", headers:p.headers, cache:"no-store"});
+      // 401/400 = endpoint LIVE (auth rejected); 200 rare for public lists
+      const live = r.status===401||r.status===400||r.status===403||r.status===200||r.status===429;
+      lines.push((live?"[LIVE]":"[DOWN]")+" "+p.name+" HTTP "+r.status);
+    }catch(err){
+      lines.push("[ERR] "+p.name+" "+err.message);
+    }
+  }
+  $("#matchLog").textContent = lines.join("\n");
+  setStatePill($("#feedState"), "Self-test done", "done");
+  dbg("self-test "+lines.length+" probes");
+  alert(lines.join("\n"));
+});
 
 updateStats();
 dbg("BOOT ok · patterns="+PATTERNS.length+" · tri-sector ready");
