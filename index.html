@@ -277,9 +277,9 @@ function extractCandidates(raw){
 
 // ───────── PATTERN DATABASE ─────────
 const PATTERNS = [
-  {id:"openai_proj", provider:"OpenAI Project/Service", re:/\b(sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,})/g, impact:"CRITICAL", blast:"Full org/project LLM spend + data exfil via API", envKey:"OPENAI_API_KEY", browser:"openai", action:"Verify with /v1/models then rotate if exposed"},
+  {id:"openai_proj", provider:"OpenAI Project/Service", re:/\b(sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,200})/g, impact:"CRITICAL", blast:"Full org/project LLM spend + data exfil via API", envKey:"OPENAI_API_KEY", browser:"openai", action:"Verify with /v1/models then rotate if exposed"},
   {id:"openai_legacy", provider:"OpenAI Legacy", re:/\b(sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20})\b/g, impact:"CRITICAL", blast:"Account LLM access", envKey:"OPENAI_API_KEY", browser:"openai", action:"Verify + rotate"},
-  {id:"openai_sk", provider:"OpenAI / sk- family", re:/\b(sk-[A-Za-z0-9]{32,})\b/g, impact:"CRITICAL", blast:"Possible OpenAI/DeepSeek-class key", envKey:"OPENAI_API_KEY", browser:"openai", action:"Verify endpoint; classify by response"},
+  {id:"openai_sk", provider:"OpenAI / sk- family", re:/\b(sk-[A-Za-z0-9]{48,})\b/g, impact:"CRITICAL", blast:"Possible OpenAI/DeepSeek-class key", envKey:"OPENAI_API_KEY", browser:"openai", action:"Verify endpoint; classify by response"},
   {id:"anthropic", provider:"Anthropic Claude", re:/\b(sk-ant-(?:api\d{2}-|admin\d{2}-)?[A-Za-z0-9_-]{40,}(?:AA)?)\b/g, impact:"CRITICAL", blast:"Claude API full access", envKey:"ANTHROPIC_API_KEY", browser:"anthropic", action:"Verify /v1/models"},
   {id:"xai", provider:"xAI (Grok)", re:/\b(xai-[A-Za-z0-9]{20,})\b/g, impact:"CRITICAL", blast:"xAI Grok API", envKey:"XAI_API_KEY", browser:"xai", action:"Verify api.x.ai/v1/models"},
   {id:"gemini", provider:"Google Gemini / AI", re:/\b(AIza[0-9A-Za-z_-]{35})\b/g, impact:"HIGH", blast:"Gemini + Google APIs (scope varies)", envKey:"GEMINI_API_KEY", browser:"gemini", action:"Verify generativelanguage.googleapis.com"},
@@ -387,32 +387,44 @@ function scan(raw){
     const v = unwrapEnvelopes(c.value);
     if (/^sk-ant-/i.test(v)) addHit(PATTERNS.find(p=>p.id==="anthropic"), v, {source:c.source, repaired:true, envHint:c.envHint});
     else if (/^xai-/i.test(v)) addHit(PATTERNS.find(p=>p.id==="xai"), v, {source:c.source, repaired:true, envHint:c.envHint});
+    else if (/^gsk_/i.test(v)) addHit(PATTERNS.find(p=>p.id==="groq"), v, {source:c.source, repaired:true, envHint:c.envHint});
     else if (/^AIza/i.test(v)) addHit(PATTERNS.find(p=>p.id==="gemini"), v, {source:c.source, repaired:true, envHint:c.envHint});
     else if (/^sk-(proj|svcacct|admin)-/i.test(v)) addHit(PATTERNS.find(p=>p.id==="openai_proj"), v, {source:c.source, repaired:true, envHint:c.envHint});
-    else if (/^sk-/i.test(v) && v.length>20) addHit(PATTERNS.find(p=>p.id==="openai_sk"), v, {source:c.source, repaired:true, envHint:c.envHint});
-    else if (/^gsk_/i.test(v)) addHit(PATTERNS.find(p=>p.id==="groq"), v, {source:c.source, repaired:true, envHint:c.envHint});
+    else if (/^sk-/i.test(v) && v.length>=48) addHit(PATTERNS.find(p=>p.id==="openai_sk"), v, {source:c.source, repaired:true, envHint:c.envHint});
+    else if (/^sk_live_|^sk_test_/i.test(v)) addHit(PATTERNS.find(p=>p.id==="stripe_live")||PATTERNS.find(p=>p.id==="stripe_test"), v, {source:c.source, repaired:true, envHint:c.envHint});
   }
 
-  detections = found;
-  repairCount += found.filter(d=>d.repaired).length;
+
+  // Prefer LONGEST secret per envKey/provider (truncated false matches die)
+  const byKey = new Map();
+  for (const f of found){
+    const k = (f.envKey||f.id)+"|"+f.provider;
+    const prev = byKey.get(k);
+    if (!prev || f.value.length > prev.value.length) byKey.set(k, f);
+  }
+  detections = [...byKey.values()];
+
+  repairCount += detections.filter(d=>d.repaired).length;
   $("#matchLog").textContent = log.length ? log.join("\n") : "// no regex hits — try paste again or check content";
   renderFeed();
   updateStats();
-  setStatePill($("#inputState"), found.length?"Input Ready":"Input Ready", "ready");
-  setStatePill($("#feedState"), found.length? (found.length+" secrets") : "No hits", found.length?"done":"");
-  $("#btnVerifyAll").disabled = !found.some(d=>d.browser);
-  $("#btnInjectAll").disabled = !found.length;
-  dbg("scan done hits="+found.length+" repairs~"+repairCount);
+  setStatePill($("#inputState"), "Input Ready", "ready");
+  setStatePill($("#feedState"), detections.length? (detections.length+" secrets") : "No hits", detections.length?"done":"");
+  $("#btnVerifyAll").disabled = !detections.some(d=>d.browser);
+  $("#btnInjectAll").disabled = !detections.length;
+  dbg("scan done hits="+detections.length+" repairs~"+repairCount);
 }
 
 // ───────── RENDER ─────────
 function verifyBadge(v){
   if (!v || v.status==="pending") return '<span class="badge vpend">PENDING</span>';
-  if (v.status===200) return '<span class="badge v200">Verified 200</span>';
-  if (v.status===401) return '<span class="badge v401">Unauthorized 401</span>';
-  if (v.status===403) return '<span class="badge v403">Forbidden 403</span>';
-  if (v.status===429) return '<span class="badge v429">Rate-Limited 429</span>';
-  if (v.status==="cors") return '<span class="badge vcors">CORS — Terminal Required</span>';
+  if (v.status===200 || v.status==="200") return '<span class="badge v200">ACTIVE 200</span>';
+  if (v.status===401 || v.status==="401") return '<span class="badge v401">INVALID 401</span>';
+  if (v.status===400 || v.status==="400") return '<span class="badge v401">INVALID 400</span>';
+  if (v.status===403 || v.status==="403") return '<span class="badge v403">FORBIDDEN 403</span>';
+  if (v.status===429 || v.status==="429") return '<span class="badge v429">RATE LIMIT 429</span>';
+  if (v.status==="cors") return '<span class="badge vcors">CORS — NOT PROOF INVALID</span>';
+  if (v.status==="terminal") return '<span class="badge vcors">USE TERMINAL</span>';
   return '<span class="badge vpend">HTTP '+v.status+'</span>';
 }
 
@@ -495,46 +507,90 @@ function renderState(){
 
 // ───────── LIVE VERIFY ─────────
 async function verifyOne(d){
-  if (!d.browser){
-    d.verify = {status:"cors", detail:"No browser endpoint — use terminal"};
-    return d;
+  // HARD SANITIZE — whitespace/newlines kill live keys
+  let secret = String(d.value||"").replace(/[\s\u200b\u200c\u200d\ufeff]/g,"").replace(/^Bearer/i,"");
+  d.value = secret;
+  d.verify = {status:"pending", detail:"checking…", method:"browser"};
+
+  function set(status, detail, method){
+    d.verify = {status:status, detail:String(detail||"").slice(0,300), method:method||"browser"};
+    dbg("verify "+d.provider+" → "+status+" ("+(method||"browser")+")");
   }
-  try{
-    let url, opts;
-    if (d.browser==="openai"){
-      url = "https://api.openai.com/v1/models";
-      opts = {headers:{Authorization:"Bearer "+d.value}};
-    } else if (d.browser==="xai"){
-      url = "https://api.x.ai/v1/models";
-      opts = {headers:{Authorization:"Bearer "+d.value}};
-    } else if (d.browser==="anthropic"){
-      url = "https://api.anthropic.com/v1/models";
-      opts = {headers:{"x-api-key":d.value, "anthropic-version":"2023-06-01", "Authorization":"Bearer "+d.value}};
-    } else if (d.browser==="gemini"){
-      url = "https://generativelanguage.googleapis.com/v1beta/models?key="+encodeURIComponent(d.value);
-      opts = {};
-    } else if (d.browser==="groq"){
-      url = "https://api.groq.com/openai/v1/models";
-      opts = {headers:{Authorization:"Bearer "+d.value}};
-    } else if (d.browser==="openrouter"){
-      url = "https://openrouter.ai/api/v1/models";
-      opts = {headers:{Authorization:"Bearer "+d.value}};
-    } else if (d.browser==="github"){
-      url = "https://api.github.com/user";
-      opts = {headers:{Authorization:"Bearer "+d.value, Accept:"application/vnd.github+json"}};
-    } else {
-      d.verify = {status:"cors", detail:"Unknown browser target"};
+
+  // Format pre-check (catch fake/truncated keys before network)
+  if (d.browser==="openai" || /^sk-/.test(secret)){
+    if (secret.startsWith("sk-proj-") && secret.length < 80){
+      // many real proj keys are 100+; short ones often fake — still probe
+    }
+    if (secret.startsWith("org-")){
+      set(400, "org-… is an Org ID, not an API key — cannot auth /v1/models", "format");
       return d;
     }
-    const r = await fetch(url, Object.assign({method:"GET", cache:"no-store"}, opts));
+  }
+  if (secret.startsWith("gsk_") && d.browser==="xai"){
+    d.browser = "groq";
+    d.provider = "Groq (was mislabeled xAI)";
+  }
+  if (secret.startsWith("xai-") && d.browser==="groq"){
+    d.browser = "xai";
+  }
+  if (secret.startsWith("AIza") && secret.length !== 39){
+    // real Google API keys are 39 chars; still try
+    d._formatWarn = "Google keys are normally 39 chars; this is "+secret.length;
+  }
+  if (secret.startsWith("sk-ant-") && !/sk-ant-api\d{2}-/.test(secret) && secret.length < 90){
+    d._formatWarn = "Anthropic keys usually look like sk-ant-api03-…AA";
+  }
+
+  if (!d.browser){
+    set("terminal", "No browser-safe endpoint — use terminal script", "terminal");
+    return d;
+  }
+
+  try{
+    let url, opts={method:"GET", cache:"no-store", headers:{Accept:"application/json"}};
+    if (d.browser==="openai"){
+      url = "https://api.openai.com/v1/models";
+      opts.headers.Authorization = "Bearer "+secret;
+    } else if (d.browser==="xai"){
+      url = "https://api.x.ai/v1/models";
+      opts.headers.Authorization = "Bearer "+secret;
+    } else if (d.browser==="anthropic"){
+      // Anthropic often BLOCKS browser CORS — try anyway, then mark clearly
+      url = "https://api.anthropic.com/v1/models";
+      opts.headers["x-api-key"] = secret;
+      opts.headers["anthropic-version"] = "2023-06-01";
+    } else if (d.browser==="gemini"){
+      url = "https://generativelanguage.googleapis.com/v1beta/models?key="+encodeURIComponent(secret);
+    } else if (d.browser==="groq"){
+      url = "https://api.groq.com/openai/v1/models";
+      opts.headers.Authorization = "Bearer "+secret;
+    } else if (d.browser==="openrouter"){
+      // /models is public — use auth/key for real validation
+      url = "https://openrouter.ai/api/v1/auth/key";
+      opts.headers.Authorization = "Bearer "+secret;
+    } else if (d.browser==="github"){
+      url = "https://api.github.com/user";
+      opts.headers.Authorization = "Bearer "+secret;
+      opts.headers.Accept = "application/vnd.github+json";
+    } else {
+      set("terminal", "Unknown browser target", "terminal");
+      return d;
+    }
+
+    const r = await fetch(url, opts);
     let detail = "";
-    try { detail = (await r.text()).slice(0,200); } catch(_){}
-    d.verify = {status:r.status, detail};
-    dbg("verify "+d.provider+" → HTTP "+r.status);
+    try { detail = (await r.text()).slice(0,240); } catch(_){}
+    if (d._formatWarn) detail = d._formatWarn + " | " + detail;
+    set(r.status, detail, "browser");
   } catch(err){
-    // CORS or network
-    d.verify = {status:"cors", detail:String(err.message||err)};
-    dbg("verify cors/err "+d.provider+" "+err.message);
+    const msg = String(err.message||err);
+    // CORS / network — NOT the same as invalid key
+    if (d.browser==="anthropic"){
+      set("cors", "Anthropic blocks browser CORS. Key NOT proven invalid. Run: curl -sS -H 'x-api-key: YOURKEY' -H 'anthropic-version: 2023-06-01' https://api.anthropic.com/v1/models → "+msg, "cors");
+    } else {
+      set("cors", "Browser blocked request (CORS/network). Not proof key is dead. "+msg, "cors");
+    }
   }
   return d;
 }
