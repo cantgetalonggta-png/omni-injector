@@ -448,12 +448,15 @@ function renderFeed(){
 }
 
 function esc(s){
-  return String(s==null?"":s)
-    .replace(/&/g,"&")
-    .replace(/</g,"<")
-    .replace(/>/g,">")
-    .replace(/"/g,""")
-    .replace(/'/g,"&#39;");
+  s = String(s==null?"":s);
+  return s.replace(/[&<>"']/g, function(c){
+    if(c==="&") return "&"+"amp;";
+    if(c==="<") return "&"+"lt;";
+    if(c===">") return "&"+"gt;";
+    if(c==='"') return "&"+"quot;";
+    if(c==="'") return "&#39;";
+    return c;
+  });
 }
 
 function updateStats(){
