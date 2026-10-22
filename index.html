@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta name="referrer" content="no-referrer"/>
-<title>Omni-Injector & Secret Validator · Client-Side Only</title>
+<title>MULTI API KEY INJECTOR · LIVE</title>
 <style>
 :root{
   --bg:#070b12;--panel:#0d1420;--panel2:#111a2a;--border:rgba(148,163,184,.16);
@@ -39,7 +39,7 @@ a{color:var(--teal)}
 .panel-h h2{font-size:.9rem;font-weight:700}
 .panel-h span{font-size:.7rem;color:var(--muted)}
 .panel-b{padding:12px;flex:1;overflow:auto}
-textarea#rawInput{width:100%;min-height:280px;height:100%;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-family:var(--mono);font-size:.78rem;line-height:1.45}
+textarea#rawInput{width:100%;min-height:420px;height:100%;resize:vertical;border:3px solid #22d3ee !important;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-family:var(--mono);font-size:.78rem;line-height:1.45}
 textarea#rawInput:focus{outline:2px solid rgba(34,211,238,.35);border-color:transparent}
 .hint{font-size:.72rem;color:var(--muted);margin-top:8px;line-height:1.4}
 .feed{display:flex;flex-direction:column;gap:10px}
@@ -78,12 +78,21 @@ footer{padding:8px 18px 14px;font-size:.68rem;color:var(--muted)}
 </style>
 </head>
 <body>
+
+<div id="keyBoxBanner" style="position:sticky;top:0;z-index:9999;background:#0f0;color:#000;padding:12px 16px;font:bold 16px Arial;border-bottom:4px solid #000;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+  <span>MULTI API KEY INPUT IS THE BIG BOX BELOW — PASTE KEYS → CLICK "Scan & Classify"</span>
+  <span style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="#rawInput" style="background:#000;color:#0f0;padding:8px 12px;text-decoration:none;font-weight:bold">JUMP TO KEY BOX</a>
+    <a href="https://raw.githack.com/cantgetalonggta-png/omni-injector/main/index.html" target="_blank" style="background:#000;color:#0ff;padding:8px 12px;text-decoration:none;font-weight:bold">OPEN STANDALONE</a>
+  </span>
+</div>
+
 <header class="topbar">
   <div class="brand">
     <div class="lock">🔐</div>
     <div>
-      Omni-Injector & Secret Validator
-      <small>100% client-side · no backend · secrets never uploaded to us</small>
+      MULTI API KEY INPUT / INJECTOR (LIVE)
+      <small>Paste ONE or MANY keys · .env dumps · bulk lists · then Scan · Verify · Inject — 100% in your browser</small>
     </div>
   </div>
   <span class="pill">LOCAL RUNTIME ONLY</span>
@@ -106,14 +115,23 @@ footer{padding:8px 18px 14px;font-size:.68rem;color:var(--muted)}
 <main class="layout">
   <section class="panel">
     <div class="panel-h">
-      <h2>Bulk Input Workspace</h2>
-      <span>.env · markdown · dumps · multi-line pastes</span>
+      <h2>★★★ MULTI API KEY INPUT BOX ★★★</h2>
+      <span>PASTE ALL KEYS HERE — multiple lines OK</span>
     </div>
     <div class="panel-b" style="display:flex;flex-direction:column">
       <div class="warn">
         <strong>Security:</strong> Parsing runs only in this browser tab. Live verify uses <em>your</em> browser → provider API (OpenAI/xAI/Anthropic/Gemini only). Stripe/DB/Firebase show terminal scripts — no secret is sent to any Omni-Injector server (there is none).
       </div>
-      <textarea id="rawInput" spellcheck="false" placeholder="Paste keys, .env dumps, markdown, or JSON here…
+      <textarea id="rawInput" name="multi_api_key_input" spellcheck="false" autofocus placeholder="★★★ MULTI API KEY INPUT ★★★
+Paste as many keys as you want, one per line or as .env:
+
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+XAI_API_KEY=xai-...
+GEMINI_API_KEY=AIza...
+STRIPE_SECRET_KEY=sk_live_...
+
+Or just paste bare keys mixed together — scanner will classify them.
 
 Examples:
 OPENAI_API_KEY=sk-...
@@ -977,5 +995,34 @@ NEXTAUTH_SECRET=..."></textarea>
   toast("Omni-Injector ready");
 })();
 </script>
+
+<script>
+(function(){
+  function mark(msg){
+    var el=document.getElementById('liveDebugBar');
+    if(!el){
+      el=document.createElement('div');
+      el.id='liveDebugBar';
+      el.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#111;color:#0f0;font:12px monospace;padding:6px 10px;border-top:1px solid #0f0;z-index:10000';
+      document.body.appendChild(el);
+    }
+    el.textContent=new Date().toISOString().slice(11,19)+' '+msg;
+  }
+  window.addEventListener('error', function(e){ mark('JS ERROR: '+(e.message||e)); });
+  document.addEventListener('DOMContentLoaded', function(){
+    var ta=document.getElementById('rawInput');
+    var scan=document.getElementById('btnScan');
+    mark('BOOT ok · textarea='+(!!ta)+' · scanBtn='+(!!scan)+' · ready');
+    if(ta){
+      ta.addEventListener('input', function(){ mark('KEY BOX live · chars='+ta.value.length); });
+    }
+    ['btnScan','btnInjectAll','btnVerifyAll','btnWipe','btnClearState','btnExportJson','btnExportEnv'].forEach(function(id){
+      var b=document.getElementById(id);
+      if(b) b.addEventListener('click', function(){ mark('CLICK '+id); }, true);
+    });
+  });
+})();
+</script>
+
 </body>
 </html>
