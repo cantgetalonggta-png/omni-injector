@@ -79,6 +79,7 @@ body{display:flex;flex-direction:column;min-height:100vh}
   <button class="btn btn-mag" id="btnInjectAll" type="button" disabled>Inject All → State</button>
   <button class="btn btn-ghost" id="btnWipe" type="button">Wipe All</button>
   <button class="btn btn-mag" id="btnSelfTest" type="button">Auto Self-Test Endpoints</button>
+  <button class="btn btn-cyan" id="btnTermux" type="button">Copy Termux Verifier</button>
   <div class="stats">
     <span>Detected: <b id="stDet">0</b></span>
     <span>Repaired: <b id="stRep">0</b></span>
@@ -157,7 +158,7 @@ Auto-repair fixes: line wraps, smart quotes, zero-width chars, Bearer wrappers, 
   </section>
 </div>
 
-<div class="foot">Omni-Injector Tri-Sector · real fetch verify for OpenAI / xAI / Anthropic / Gemini / Groq / GitHub · terminal scripts for Stripe / DB / Firebase / Discord / Slack · localStorage state only in this origin · does not write into Grok cloud accounts</div>
+<div class="foot">Omni-Injector Tri-Sector · real fetch verify for OpenAI / xAI / Anthropic / Gemini / Groq / OpenRouter / GitHub / Stripe / HF / Replicate · terminal scripts for Stripe / DB / Firebase / Discord / Slack · localStorage state only in this origin · does not write into Grok cloud accounts</div>
 <div class="dbg" id="dbg">boot…</div>
 
 <script>
@@ -286,7 +287,7 @@ const PATTERNS = [
   {id:"google_oauth_secret", provider:"Google OAuth Client Secret", re:/\b(GOCSPX-[A-Za-z0-9_-]+)\b/g, impact:"HIGH", blast:"OAuth client secret", envKey:"GOOGLE_CLIENT_SECRET", browser:null, terminal:"# Pair with client id; treat as HIGH — rotate in Google Cloud Console"},
   {id:"groq", provider:"Groq", re:/\b(gsk_[A-Za-z0-9]{20,})\b/g, impact:"HIGH", blast:"Groq inference API", envKey:"GROQ_API_KEY", browser:"groq", action:"Verify api.groq.com"},
   {id:"openrouter", provider:"OpenRouter", re:/\b(sk-or-v1-[a-f0-9]{64})\b/g, impact:"HIGH", blast:"Multi-model proxy spend", envKey:"OPENROUTER_API_KEY", browser:"openrouter", action:"Verify openrouter.ai/api/v1/models"},
-  {id:"stripe_live", provider:"Stripe LIVE secret", re:/\b(sk_live_[0-9a-zA-Z]{20,})\b/g, impact:"CRITICAL", blast:"Live payments / payouts", envKey:"STRIPE_SECRET_KEY", browser:null, terminal:"curl -sS https://api.stripe.com/v1/balance -u \"{{SECRET}}:\""},
+  {id:"stripe_live", provider:"Stripe LIVE secret", re:/\b(sk_live_[0-9a-zA-Z]{20,})\b/g, impact:"CRITICAL", blast:"Live payments / payouts", envKey:"STRIPE_SECRET_KEY", browser:"stripe", action:"Verify api.stripe.com/v1/balance", terminal:"curl -sS https://api.stripe.com/v1/balance -u \"{{SECRET}}:\""},
   {id:"stripe_test", provider:"Stripe TEST secret", re:/\b(sk_test_[0-9a-zA-Z]{20,})\b/g, impact:"MEDIUM", blast:"Test-mode charges only", envKey:"STRIPE_TEST_SECRET_KEY", browser:null, terminal:"curl -sS https://api.stripe.com/v1/balance -u \"{{SECRET}}:\""},
   {id:"stripe_rk", provider:"Stripe Restricted", re:/\b(rk_(?:live|test)_[0-9a-zA-Z]{20,})\b/g, impact:"HIGH", blast:"Restricted Stripe key", envKey:"STRIPE_RESTRICTED_KEY", browser:null, terminal:"curl -sS https://api.stripe.com/v1/balance -u \"{{SECRET}}:\""},
   {id:"stripe_whsec", provider:"Stripe Webhook secret", re:/\b(whsec_[A-Za-z0-9]{20,})\b/g, impact:"HIGH", blast:"Webhook forgery if leaked with endpoint", envKey:"STRIPE_WEBHOOK_SECRET", browser:null, terminal:"echo \"Length $(printf %s '{{SECRET}}' | wc -c) — rotate in Stripe Dashboard → Webhooks\""},
@@ -304,8 +305,8 @@ const PATTERNS = [
   {id:"redis", provider:"Redis URL", re:/\b(rediss?:\/\/[^\s\"']{8,})\b/gi, impact:"HIGH", blast:"Cache/session store", envKey:"REDIS_URL", browser:null, terminal:"redis-cli -u \"{{SECRET}}\" PING"},
   {id:"firebase", provider:"Firebase / GCP service-ish", re:/(?:FIREBASE_|GOOGLE_APPLICATION_CREDENTIALS|private_key)[^\n]{0,40}|(-----BEGIN PRIVATE KEY-----[\s\S]*?-----END PRIVATE KEY-----)/g, impact:"CRITICAL", blast:"Admin / service account", envKey:"FIREBASE_PRIVATE_KEY", browser:null, terminal:"# Use gcloud auth / firebase admin SDK locally — never paste private keys into untrusted hosts"},
   {id:"nextauth", provider:"NextAuth secret", re:/(?:NEXTAUTH_SECRET|AUTH_SECRET)\s*[=:]\s*([^\s\"']{16,})/gi, impact:"HIGH", blast:"Session forgery", envKey:"NEXTAUTH_SECRET", browser:null, terminal:"echo \"len=$(printf %s '{{SECRET}}' | wc -c) — rotate if exposed\""},
-  {id:"hf", provider:"HuggingFace", re:/\b(hf_[A-Za-z0-9]{20,})\b/g, impact:"MEDIUM", blast:"HF hub/model API", envKey:"HF_TOKEN", browser:null, terminal:"curl -sS -H \"Authorization: Bearer {{SECRET}}\" https://huggingface.co/api/whoami-v2"},
-  {id:"replicate", provider:"Replicate", re:/\b(r8_[A-Za-z0-9]{20,})\b/g, impact:"HIGH", blast:"Replicate model runs", envKey:"REPLICATE_API_TOKEN", browser:null, terminal:"curl -sS -H \"Authorization: Token {{SECRET}}\" https://api.replicate.com/v1/account"},
+  {id:"hf", provider:"HuggingFace", re:/\b(hf_[A-Za-z0-9]{20,})\b/g, impact:"MEDIUM", blast:"HF hub/model API", envKey:"HF_TOKEN", browser:"hf", action:"Verify huggingface.co/api/whoami-v2", terminal:"curl -sS -H \"Authorization: Bearer {{SECRET}}\" https://huggingface.co/api/whoami-v2"},
+  {id:"replicate", provider:"Replicate", re:/\b(r8_[A-Za-z0-9]{20,})\b/g, impact:"HIGH", blast:"Replicate model runs", envKey:"REPLICATE_API_TOKEN", browser:"replicate", action:"Verify api.replicate.com/v1/account", terminal:"curl -sS -H \"Authorization: Token {{SECRET}}\" https://api.replicate.com/v1/account"},
   {id:"npm", provider:"npm token", re:/\b(npm_[A-Za-z0-9]{20,})\b/g, impact:"HIGH", blast:"Package publish", envKey:"NPM_TOKEN", browser:null, terminal:"npm whoami --registry https://registry.npmjs.org/"},
 ];
 
@@ -573,6 +574,15 @@ async function verifyOne(d){
       url = "https://api.github.com/user";
       opts.headers.Authorization = "Bearer "+secret;
       opts.headers.Accept = "application/vnd.github+json";
+    } else if (d.browser==="hf"){
+      url = "https://huggingface.co/api/whoami-v2";
+      opts.headers.Authorization = "Bearer "+secret;
+    } else if (d.browser==="replicate"){
+      url = "https://api.replicate.com/v1/account";
+      opts.headers.Authorization = "Token "+secret;
+    } else if (d.browser==="stripe"){
+      url = "https://api.stripe.com/v1/balance";
+      opts.headers.Authorization = "Basic "+btoa(secret+":");
     } else {
       set("terminal", "Unknown browser target", "terminal");
       return d;
@@ -599,7 +609,7 @@ async function verifyAll(){
   setStatePill($("#feedState"), "Verifying…", "parsing");
   for (const d of detections){
     if (d.browser) await verifyOne(d);
-    else d.verify = {status:"cors", detail:"terminal"};
+    else d.verify = {status:"terminal", detail:"Use Copy Terminal Script or Termux Verifier", method:"terminal"};
   }
   renderFeed();
   updateStats();
@@ -704,6 +714,58 @@ try{
 }catch(_){}
 
 
+
+function buildTermuxScript(dets){
+  const lines = ["#!/data/data/com.termux/files/usr/bin/bash","set -e","echo '=== OMNI TERMUX LIVE VERIFY ==='"];
+  const seen=new Set();
+  for (const d of (dets||[])){
+    const s = String(d.value||"").replace(/[\s\u200b]/g,"");
+    if (!s || seen.has(s)) continue; seen.add(s);
+    const name = (d.provider||d.id||"key").replace(/[^A-Za-z0-9_]+/g,"_").slice(0,40);
+    if (d.browser==="openai" || s.startsWith("sk-proj-") || (s.startsWith("sk-") && !s.startsWith("sk-ant") && !s.startsWith("sk_"))){
+      lines.push(`echo -n "OpenAI/${name}: "; curl -sS -o /dev/null -w "%{http_code}\\n" --max-time 20 -H "Authorization: Bearer ${s}" https://api.openai.com/v1/models`);
+    } else if (d.browser==="xai" || s.startsWith("xai-")){
+      lines.push(`echo -n "xAI/${name}: "; curl -sS -o /dev/null -w "%{http_code}\\n" --max-time 20 -H "Authorization: Bearer ${s}" https://api.x.ai/v1/models`);
+    } else if (d.browser==="anthropic" || s.startsWith("sk-ant-")){
+      lines.push(`echo -n "Anthropic/${name}: "; curl -sS -o /dev/null -w "%{http_code}\\n" --max-time 20 -H "x-api-key: ${s}" -H "anthropic-version: 2023-06-01" https://api.anthropic.com/v1/models`);
+    } else if (d.browser==="gemini" || s.startsWith("AIza")){
+      lines.push(`echo -n "Gemini/${name}: "; curl -sS -o /dev/null -w "%{http_code}\\n" --max-time 20 "https://generativelanguage.googleapis.com/v1beta/models?key=${s}"`);
+    } else if (d.browser==="groq" || s.startsWith("gsk_")){
+      lines.push(`echo -n "Groq/${name}: "; curl -sS -o /dev/null -w "%{http_code}\\n" --max-time 20 -H "Authorization: Bearer ${s}" https://api.groq.com/openai/v1/models`);
+    } else if (d.browser==="github"){
+      lines.push(`echo -n "GitHub/${name}: "; curl -sS -o /dev/null -w "%{http_code}\\n" --max-time 20 -H "Authorization: Bearer ${s}" -H "Accept: application/vnd.github+json" https://api.github.com/user`);
+    } else if (d.browser==="stripe" || s.startsWith("sk_live_") || s.startsWith("sk_test_")){
+      lines.push(`echo -n "Stripe/${name}: "; curl -sS -o /dev/null -w "%{http_code}\\n" --max-time 20 -u "${s}:" https://api.stripe.com/v1/balance`);
+    } else if (d.browser==="hf" || s.startsWith("hf_")){
+      lines.push(`echo -n "HF/${name}: "; curl -sS -o /dev/null -w "%{http_code}\\n" --max-time 20 -H "Authorization: Bearer ${s}" https://huggingface.co/api/whoami-v2`);
+    } else if (d.browser==="replicate" || s.startsWith("r8_")){
+      lines.push(`echo -n "Replicate/${name}: "; curl -sS -o /dev/null -w "%{http_code}\\n" --max-time 20 -H "Authorization: Token ${s}" https://api.replicate.com/v1/account`);
+    } else if (d.browser==="openrouter" || s.startsWith("sk-or-v1-")){
+      lines.push(`echo -n "OpenRouter/${name}: "; curl -sS -o /dev/null -w "%{http_code}\\n" --max-time 20 -H "Authorization: Bearer ${s}" https://openrouter.ai/api/v1/auth/key`);
+    }
+  }
+  lines.push("echo 'DONE — 200=ACTIVE 401/400=INVALID 429=RATE-LIMITED'");
+  return lines.join("\n");
+}
+
+$("#btnTermux").addEventListener("click", async ()=>{
+  const script = detections.length ? buildTermuxScript(detections) : `#!/data/data/com.termux/files/usr/bin/bash
+# 1) Paste keys into ~/omni-verify/keys.env as KEY=value
+# 2) Or Scan secrets in Omni first, then click this button again
+pkg install -y curl
+mkdir -p ~/omni-verify && cd ~/omni-verify
+[ -f keys.env ] || nano keys.env
+# After scan+this button, full per-key curls are generated.`;
+  try{
+    await navigator.clipboard.writeText(script);
+    alert("Termux verifier copied to clipboard.\\nPaste into Termux, save as verify_live.sh, chmod +x, run.\\n\\nLines: "+script.split("\\n").length);
+  }catch(e){
+    const ta=document.createElement("textarea"); ta.value=script; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+    alert("Termux script copied (fallback). Paste into Termux.");
+  }
+  dbg("termux script copied");
+});
+
 $("#btnSelfTest").addEventListener("click", async ()=>{
   setStatePill($("#feedState"), "Self-test…", "parsing");
   const probes = [
@@ -712,7 +774,11 @@ $("#btnSelfTest").addEventListener("click", async ()=>{
     {name:"Anthropic", url:"https://api.anthropic.com/v1/models", headers:{"x-api-key":"sk-ant-api03-INVALID", "anthropic-version":"2023-06-01"}},
     {name:"Gemini", url:"https://generativelanguage.googleapis.com/v1beta/models?key=AIzaSyINVALID_SELFTEST_00000000000", headers:{}},
     {name:"Groq", url:"https://api.groq.com/openai/v1/models", headers:{Authorization:"Bearer gsk_INVALID_SELFTEST"}},
-    {name:"GitHub", url:"https://api.github.com/user", headers:{Authorization:"Bearer ghp_INVALIDSELFTEST0000000000000000000", Accept:"application/vnd.github+json"}}
+    {name:"OpenRouter", url:"https://openrouter.ai/api/v1/auth/key", headers:{Authorization:"Bearer sk-or-v1-INVALIDSELFTESTONLY_NOT_A_REAL_KEY_000000000000000000000000"}},
+    {name:"GitHub", url:"https://api.github.com/user", headers:{Authorization:"Bearer ghp_INVALIDSELFTEST0000000000000000000", Accept:"application/vnd.github+json"}},
+    {name:"Stripe", url:"https://api.stripe.com/v1/balance", headers:{Authorization:"Basic "+btoa("sk_live_INVALID:")}},
+    {name:"HuggingFace", url:"https://huggingface.co/api/whoami-v2", headers:{Authorization:"Bearer hf_INVALID"}},
+    {name:"Replicate", url:"https://api.replicate.com/v1/account", headers:{Authorization:"Token r8_INVALID"}}
   ];
   const lines = [];
   for (const p of probes){
